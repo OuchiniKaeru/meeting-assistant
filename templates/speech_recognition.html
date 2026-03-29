@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎙️ Gemini Meeting Assistant</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7f9;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: inherit;
+        }
+
+        .container {
+            flex: 1;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            margin: 0 0 5px 0;
+            font-size: 24px;
+        }
+
+        .header p {
+            margin: 0;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-start {
+            background-color: #4caf50;
+        }
+
+        .btn-stop {
+            background-color: #f44336;
+        }
+
+        .btn-clear {
+            background-color: #795548;
+        }
+
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+            opacity: 1;
+        }
+
+        .status {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            background: #e0e0e0;
+            flex-shrink: 0;
+        }
+
+        .status.running {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+
+        .main-content {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel h3 {
+            margin-top: 0;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            flex-shrink: 0;
+            font-size: 18px;
+        }
+
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .history-item {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px dashed #ccc;
+        }
+
+        .history-item .time {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .history-item .text {
+            font-size: 1rem;
+        }
+
+        .current-text {
+            color: #1976d2;
+            font-style: italic;
+            min-height: 30px;
+            margin-bottom: 15px;
+        }
+
+        .qa-item {
+            margin-bottom: 15px;
+        }
+
+        .qa-q {
+            font-weight: bold;
+            color: #d32f2f;
+        }
+
+        .qa-a {
+            margin-top: 5px;
+            color: #388e3c;
+        }
+
+        .qa-a-en {
+            margin-top: 5px;
+            color: #1976d2;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Gemini Meeting Assistant</h1>
+            <p>Gemini Multimodal Live APIとAgnoエージェントを用いたリアルタイム認識・翻訳・要約システム</p>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" class="btn btn-start">🎤 認識開始</button>
+            <button id="stopBtn" class="btn btn-stop" disabled>⏹️ 認識停止</button>
+            <button id="clearBtn" class="btn btn-clear">🗑️ 履歴・要約クリア</button>
+        </div>
+
+        <div id="status" class="status">システムに接続中...</div>
+
+        <div class="main-content">
+            <!-- 認識結果パネル -->
+            <div class="panel">
+                <h3>💬 リアルタイム認識・翻訳</h3>
+                <div id="currentText" class="current-text">
+                    ここに認識中のテキストが表示されます...
+                </div>
+                <div id="history" class="content-area"></div>
+            </div>
+
+            <!-- AI要約パネル -->
+            <div class="panel">
+                <h3>🤖 AI要約 (Agno)</h3>
+                <div id="summaryContent" class="content-area">
+                    音声が一定量たまると自動的に要約が生成されます。
+                </div>
+            </div>
+
+            <!-- Q&Aパネル -->
+            <div class="panel">
+                <h3>❓ 想定Q&A</h3>
+                <div id="qaContent" class="content-area">
+                    要約内に質問事項が含まれている場合、自動的に回答例が生成されます。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <script src="/static/js/speech_recognition.js"></script>
+</body>
+
+</html>

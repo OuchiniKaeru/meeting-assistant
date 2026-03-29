@@ -1,0 +1,36 @@
+# AutoGen用MCP設定ファイル
+segmentation_settings:
+  strategy: Default
+  time_params:
+    max_time_ms: 10000
+    silence_timeout_ms: 2000
+speech_language_settings:
+  speech_recognition_language: en-US
+  target_language: ja
+openai_transcription_settings:
+  input_audio_noise_reduction:
+    type: near_field
+  turn_detection:
+    type: server_vad
+    threshold: 0.5
+    prefix_padding_ms: 300
+    silence_duration_ms: 300
+mcp_servers:
+- name: term_dictionary
+  url: http://localhost:8000/sse
+  type: sse
+  description: 専門用語辞書サーバー
+  timeout: 30
+  enabled: false
+  headers:
+    Content-Type: application/json
+- name: MSLearnDocs
+  url: https://learn.microsoft.com/api/mcp
+  type: StreamableHttp
+  description: MS Learn Docs サーバー
+  timeout: 30
+  enabled: false
+  sse_read_timeout: 300
+  terminate_on_close: true
+  headers:
+    Content-Type: application/json
