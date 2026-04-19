@@ -5,10 +5,24 @@ Gemini Live API + Agno Agent Processing System
 """
 
 import os
+import sys
+import io
+
+# Windows cp932エラー対策: 標準出力をUTF-8に設定
+os.environ["PYTHONIOENCODING"] = "utf-8"
+os.environ["PYTHONUTF8"] = "1"
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+else:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+import os
 import asyncio
 import threading
 import signal
-import sys
 import json
 import time
 import re
@@ -56,6 +70,12 @@ class GeminiTranscriptionSystem:
         self.is_running = False
         self.recognition_history = []
         self.last_summary = ""
+        self.last_summarized_index = 0
+        # 構造化された要約履歴
+        self.summaries_data = {
+            'summaries': [],      # 要約本文のリスト
+            'terms': []           # 専門用語解説のリスト
+        }
         self.executor = ThreadPoolExecutor(max_workers=4)
         self.auto_summary_enabled = True
         
@@ -71,7 +91,7 @@ class GeminiTranscriptionSystem:
         # AgnoのGeminiモデルは明示的に GOOGLE_API_KEY を要求するため、環境変数にセットする
         os.environ["GOOGLE_API_KEY"] = gemini_api_key
         
-        print("✅ Gemini & Agno クライアントを準備しました。")
+        print("[OK] Gemini & Agno クライアントを準備しました。")
     
     def _create_transcriber(self):
         def callback(event_type, partial_text, full_text):
@@ -114,8 +134,12 @@ class GeminiTranscriptionSystem:
                 if not self.recognition_history:
                     return
                 
+                new_history = self.recognition_history[self.last_summarized_index:]
+                if not new_history:
+                    return
+
                 combined_text = ""
-                for item in self.recognition_history:
+                for item in new_history:
                     combined_text += f"[{item['timestamp']}] {item['text']}\n"
                 
                 if not combined_text.strip():
@@ -133,14 +157,13 @@ class GeminiTranscriptionSystem:
 - 全体意図から考えて、明らかにスペルミス（同音異義語）だと思う語句は*修正*してください。
 - 専門用語が出現した場合は、積極的に explain_japanese_terms ツールを利用して定義を取得し、補足として含めてください。
 
-出力形式：マークダウン
+[出力形式]
+以下の2つのセクションを必ず含めてください。該当内容がない場合は「なし」と記載してください。
+
 ### 要約
 - 主要なポイントを箇条書き
 
-### 質問
-- 明確な質問文が含まれる場合の質問事項
-
-### 事実・専門用語解説
+### 専門用語解説
 - 重要な事実やデータの箇条書き、ツールを使用して取得した専門用語の解説""",
                     markdown=True,
                 )
@@ -150,22 +173,81 @@ class GeminiTranscriptionSystem:
                 
                 if summary:
                     self.last_summary = summary
+                    self.last_summarized_index = len(self.recognition_history)
+                    
+                    # 要約をパースして構造化データに追加
+                    parsed = self._parse_summary(summary)
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    if parsed['summary']:
+                        self.summaries_data['summaries'].append({
+                            'content': parsed['summary'],
+                            'timestamp': timestamp
+                        })
+                    if parsed['terms']:
+                        self.summaries_data['terms'].append({
+                            'content': parsed['terms'],
+                            'timestamp': timestamp
+                        })
+                    
+                    # 累積要約を構築
+                    accumulated_summary = self._build_accumulated_summary()
+                    
                     event_name = 'summary_generated' if manual else 'auto_summary_generated'
                     socketio.emit(event_name, {
-                        'summary': summary,
-                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'summary': accumulated_summary,
+                        'timestamp': timestamp,
                         'azure_count': 0,
                         'openai_count': len(self.recognition_history),
                         'auto': not manual
                     })
                     
-                    if "### 質問" in summary and "-" in summary.split("### 質問")[-1].split("###")[0]:
-                        self._auto_generate_qa(summary)
+                    # 毎回自動でQA（示唆に富んだ質問・議論すべき事項）を生成
+                    self._auto_generate_qa(accumulated_summary)
                         
             except Exception as e:
                 print(f"[ERROR] Agno要約生成エラー: {e}")
                 
         self.executor.submit(run_agno_summary)
+
+    def _parse_summary(self, summary_text):
+        """要約テキストをパースして構造化データに分離"""
+        result = {
+            'summary': '',
+            'terms': ''
+        }
+        
+        # セクションを分割
+        sections = summary_text.split('###')
+        
+        for section in sections:
+            section = section.strip()
+            if section.startswith('要約'):
+                result['summary'] = section.replace('要約', '').strip()
+            elif section.startswith('専門用語解説'):
+                result['terms'] = section.replace('専門用語解説', '').strip()
+        
+        return result
+
+    def _build_accumulated_summary(self):
+        """累積要約を構築して返す（カテゴリ別）"""
+        parts = []
+        
+        # 要約セクション
+        if self.summaries_data['summaries']:
+            summary_parts = ['### 要約']
+            for entry in self.summaries_data['summaries']:
+                summary_parts.append(f"**[{entry['timestamp']}]**\n{entry['content']}")
+            parts.append('\n\n'.join(summary_parts))
+        
+        # 専門用語解説セクション
+        if self.summaries_data['terms']:
+            terms_parts = ['### 専門用語解説']
+            for entry in self.summaries_data['terms']:
+                terms_parts.append(f"**[{entry['timestamp']}]**\n{entry['content']}")
+            parts.append('\n\n'.join(terms_parts))
+        
+        return '\n\n---\n\n'.join(parts) if parts else ''
 
     def _auto_generate_qa(self, summary):
         def run_qa_generation():
@@ -183,25 +265,37 @@ class GeminiTranscriptionSystem:
         self.executor.submit(run_qa_generation)
 
     def _generate_qa_from_summary(self, summary):
+        """示唆に富んだ質問を生成（話されていない内容について）"""
         try:
             agent = Agent(
                 model=Gemini(id="gemini-2.5-flash"),
-                instructions="""あなたは要約から質問を抽出し、適切な回答例を生成する専門家です。
-「### 質問」セクションから具体的な質問を抽出し、以下のJSON形式の配列のみを出力してください。
-Markdownの枠（```json など）はつけずに生のJSON配列文字列のみ出力してください。
+                instructions="""あなたは会議の内容を深く分析し、まだ議論されていない重要な観点から示唆に富んだ質問を生成する専門家です。
+
+[タスク]
+会議の要約を分析し、以下の観点から新たな質問を2-3個生成してください：
+- まだ議論されていないが重要な視点
+- 深掘りすべきポイント
+- 関連するが触れられていないトピック
+- 将来の課題やリスク
+
+[出力形式]
+以下のJSON形式の配列のみを出力してください。Markdownの枠（```json など）はつけずに生のJSON配列文字列のみ出力してください。
 [
-  {
-    "question": "抽出した質問",
-    "answers": [
-      {
-        "japanese": "日本語での回答例",
-        "english": "English answer example"
-      }
-    ]
-  }
-]""",
+  {"question": "示唆に富んだ質問1", "discussion_topic": "議論すべき事項1"},
+  {"question": "示唆に富んだ質問2", "discussion_topic": "議論すべき事項2"},
+  {"question": "示唆に富んだ質問3", "discussion_topic": "議論すべき事項3"}
+]
+
+[注意]
+- 既に話された内容の要約や、既存の質問の繰り返しは避けてください
+- 新たな視点や深掘りの質問を心がけてください
+- 回答は不要です。質問と議論すべき事項のみを出力してください""",
             )
-            response = agent.run(f"以下の要約から質問を抽出し、回答例を生成してください：\n\n{summary}")
+            
+            # 累積された要約も含めて分析
+            all_summaries = self._build_accumulated_summary()
+            
+            response = agent.run(f"以下の会議内容を分析し、示唆に富んだ質問を生成してください：\n\n{all_summaries}")
             
             qa_text = response.content
             # JSON部分の抽出
@@ -217,7 +311,13 @@ Markdownの枠（```json など）はつけずに生のJSON配列文字列のみ
     def clear_history(self):
         self.recognition_history.clear()
         self.last_summary = ""
-        print("✅ 履歴をクリアしました")
+        self.last_summarized_index = 0
+        # 構造化要約データもクリア
+        self.summaries_data = {
+            'summaries': [],
+            'terms': []
+        }
+        print("[OK] 履歴をクリアしました")
 
     def get_results_summary(self):
         return {
@@ -264,6 +364,8 @@ def start_parallel_processing():
                 'timestamp': datetime.now().strftime("%H:%M:%S")
             })
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             transcription_system.is_running = False
             socketio.emit('error', {'message': f'エラー: {str(e)}'})
 
@@ -336,7 +438,7 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 if __name__ == '__main__':
-    print("🎙️ Gemini & Agno 処理システムを起動中...")
-    print("🌐 http://localhost:5000 でアクセスしてください")
-    print("🛑 Ctrl+C で終了します")
+    print("[START] Gemini & Agno 処理システムを起動中...")
+    print("[URL] http://localhost:5000 でアクセスしてください")
+    print("[INFO] Ctrl+C で終了します")
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True, log_output=False)

@@ -99,34 +99,35 @@ socket.on('summary_generated', (data) => {
 socket.on('qa_generated', (data) => {
     console.log('QA generated:', data);
     if (!data.questions || data.questions.length === 0) {
-        qaContentDiv.innerHTML = '<div>質問が含まれていません。</div>';
         return;
     }
     
-    let html = '';
+    if (qaContentDiv.innerHTML.includes('示唆に富んだ質問や、議論すべき事項が表示されます。')) {
+        qaContentDiv.innerHTML = '';
+    }
+
+    let html = `<div class="qa-block" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+        <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">**[${data.timestamp}]**</div>
+        <div class="qa-list">`;
     data.questions.forEach((q, i) => {
         html += `<div class="qa-item">
             <div class="qa-q">Q${i+1}: ${q.question}</div>`;
-        if (q.answers && q.answers.length > 0) {
-            q.answers.forEach((ans, j) => {
-                if (ans.japanese) {
-                    html += `<div class="qa-a">A${j+1}: ${ans.japanese}</div>`;
-                }
-                if (ans.english && ans.english !== ans.japanese) {
-                    html += `<div class="qa-a-en">Eng: ${ans.english}</div>`;
-                }
-            });
+        if (q.discussion_topic) {
+            html += `<div class="qa-a">🗣️ 議論すべき事項: ${q.discussion_topic}</div>`;
         }
         html += `</div>`;
     });
-    qaContentDiv.innerHTML = html;
+    html += '</div></div>';
+    
+    qaContentDiv.insertAdjacentHTML('beforeend', html);
+    qaContentDiv.scrollTop = qaContentDiv.scrollHeight;
 });
 
 socket.on('history_cleared', (data) => {
     historyDiv.innerHTML = '';
     currentTextDiv.innerHTML = '履歴がクリアされました。';
     summaryContentDiv.innerHTML = '音声が一定量たまると自動的に要約が生成されます。';
-    qaContentDiv.innerHTML = '要約内に質問事項が含まれている場合、自動的に回答例が生成されます。';
+    qaContentDiv.innerHTML = '示唆に富んだ質問や、議論すべき事項が表示されます。';
     console.log(data.message);
 });
 

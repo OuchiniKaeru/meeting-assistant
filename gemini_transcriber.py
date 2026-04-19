@@ -43,7 +43,7 @@ class GeminiRealtimeTranscriber:
             
         self.thread = threading.Thread(target=run_loop, daemon=True)
         self.thread.start()
-        print("✅ Gemini Live API 音声認識を開始しました")
+        print("[OK] Gemini Live API 音声認識を開始しました")
         return True
 
     async def _transcribe_loop(self):
@@ -132,15 +132,15 @@ class GeminiRealtimeTranscriber:
                                     current_text = ""
 
                         send_task.cancel()
-                        print("⚠️ Gemini Live Session closed naturally. Reconnecting soon...")
+                        print("[WARN] Gemini Live Session closed naturally. Reconnecting soon...")
                         await asyncio.sleep(0.5)
                         
                 except Exception as loop_e:
-                    print(f"⚠️ Gemini Live Connection Interrupted (reconnecting): {loop_e}")
+                    print(f"[WARN] Gemini Live Connection Interrupted (reconnecting): {loop_e}")
                     await asyncio.sleep(1)
                     
         except Exception as e:
-            print(f"❌ Gemini Transcriber Fatal Error: {e}")
+            print(f"[ERROR] Gemini Transcriber Fatal Error: {e}")
         finally:
             self.cleanup()
 
@@ -148,7 +148,7 @@ class GeminiRealtimeTranscriber:
         self.is_running = False
         if self.task:
             self.task.cancel()
-        print("✅ 音声認識を停止しました")
+        print("[OK] 音声認識を停止しました")
 
     def cleanup(self):
         if self.audio_stream:

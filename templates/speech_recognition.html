@@ -35,6 +35,8 @@
             display: flex;
             flex-direction: column;
             padding: 20px;
+            height: 100%;
+            overflow: hidden;
         }
 
         .header {
@@ -115,6 +117,7 @@
             display: flex;
             gap: 20px;
             flex: 1;
+            min-height: 0;
             overflow: hidden;
         }
 
@@ -126,7 +129,38 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-height: 0;
             overflow: hidden;
+        }
+
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        /* コンテンツエリアのスクロールバースタイル */
+        .content-area::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .content-area::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .content-area::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .content-area::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .content-area {
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f1f1f1;
         }
 
         .panel h3 {
@@ -137,15 +171,6 @@
             justify-content: space-between;
             flex-shrink: 0;
             font-size: 18px;
-        }
-
-        .content-area {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            background: #fafafa;
-            border: 1px solid #ddd;
-            border-radius: 5px;
         }
 
         .history-item {
@@ -169,6 +194,10 @@
             font-style: italic;
             min-height: 30px;
             margin-bottom: 15px;
+            padding: 8px;
+            background: #e3f2fd;
+            border-radius: 5px;
+            flex-shrink: 0;
         }
 
         .qa-item {
@@ -197,7 +226,7 @@
     <div class="container">
         <div class="header">
             <h1>🎙️ Gemini Meeting Assistant</h1>
-            <p>Gemini Multimodal Live APIとAgnoエージェントを用いたリアルタイム認識・翻訳・要約システム</p>
+            <p>Gemini Multimodal Live APIとAIエージェントを用いたリアルタイム認識・翻訳・要約システム</p>
         </div>
 
         <div class="controls">
@@ -220,7 +249,7 @@
 
             <!-- AI要約パネル -->
             <div class="panel">
-                <h3>🤖 AI要約 (Agno)</h3>
+                <h3>🤖 AI要約 (AIエージェント)</h3>
                 <div id="summaryContent" class="content-area">
                     音声が一定量たまると自動的に要約が生成されます。
                 </div>
@@ -228,9 +257,9 @@
 
             <!-- Q&Aパネル -->
             <div class="panel">
-                <h3>❓ 想定Q&A</h3>
+                <h3>❓ 質問と議論すべき事項</h3>
                 <div id="qaContent" class="content-area">
-                    要約内に質問事項が含まれている場合、自動的に回答例が生成されます。
+                    示唆に富んだ質問や、議論すべき事項を表示します。
                 </div>
             </div>
         </div>
